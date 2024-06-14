@@ -7,7 +7,7 @@ Set up a conda environment as follows:
 conda create -n apa python=3.9.13
 conda activate apa
 conda install tensorflow==2.10.0
-pip install numpy==1.22.3 pandas==1.4.3 pillow==9.2.0 protobuf==3.19.4 scikit-image==0.22.0 scipy==1.9.0 tensorflow-io-gcs-filesystem>=0.34.0 torch==1.12.0 ultralytics==8.0.192 torchvision==0.13.0
+pip install numpy==1.22.3 pandas==1.4.3 pillow==9.2.0 protobuf==3.19.4 scikit-image==0.22.0 scipy==1.9.0 tensorflow-io-gcs-filesystem>=0.34.0 torch==1.12.0 ultralytics==8.0.192 torchvision==0.13.0 libclang==13.0.0
 ```
 
 
