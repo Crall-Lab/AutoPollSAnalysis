@@ -1,0 +1,104 @@
+---
+title: "AutoPollS Analysis Verification"
+author: 'Acacia Tang'
+date: '2024-06-27'
+output: html_document
+---
+```{r, include=FALSE}
+library(dplyr)
+```
+### Directories with results
+```{r}
+CSVdir <- '/run/user/1001/gvfs/ftp:host=bombus2.local/NetBackup/Cran_Autopoll_2023/testRun'
+CropsDir <- '/run/user/1001/gvfs/ftp:host=bombus2.local/NetBackup/Cran_Autopoll_2023/testCrops'
+```
+
+```{r, echo=FALSE}
+
+CSVs <- list.files(CSVdir, pattern = paste0('_bees.csv', "$"), full.names = TRUE)
+if (length(CSVs) == 0) {
+  stop("No files found with the specified suffix.")
+}
+
+# Read and combine CSV files
+allBees <- lapply(CSVs, read.csv) %>%
+  bind_rows()
+```
+
+### Occurance of insect groups
+```{r}
+occurance <- data.frame(sort(table(allBees$class1), decreasing = TRUE))
+print(occurance)
+plot(occurance)
+```
+
+### Parameters to verify
+```{r}
+detectionConf <- 0.8
+classificationConf <- 0.8
+minOccurance <- 100 #must have this many occurances to run verification
+sampleN <- 5 #number of files to copy for verification
+outDir <- 'Verify' #where to write jpgs for checking
+```
+
+```{r, echo = FALSE}
+if (!file.exists(outDir)) {
+    dir.create(outDir)
+}
+
+runMe <- occurance[occurance$Freq > minOccurance,]
+
+verify <- function(x) {
+    name <- as.character(x[1,1])
+    print(name)
+
+    if (!file.exists(file.path(outDir, name))) {
+        dir.create(file.path(outDir, name))
+    }
+    if (!file.exists(file.path(outDir, name, 'positive'))) {
+        dir.create(file.path(outDir, name, 'positive'))
+    }
+
+    if (!file.exists(file.path(outDir, name, 'negative'))) {
+        dir.create(file.path(outDir, name, 'negative'))
+    }
+
+
+    sightings <- allBees[allBees$class1 == name,]
+
+    sightings$good <- sightings$conf > detectionConf & sightings$prob1 > classificationConf
+
+    good <- sightings[sightings$good,]
+    bad <- sightings[!sightings$good,]
+
+    if (nrow(bad) < sampleN) {
+        negatives <- bad
+    } else {
+        negatives <- bad[sample(nrow(bad), sampleN, replace = FALSE),]
+    }
+     
+    if (nrow(good) < sampleN) {
+        positives <- good
+    } else {
+        positives <- good[sample(nrow(good), sampleN, replace = FALSE),]
+    }
+
+    writePosFiles <- function(row) {
+        subdir = paste(c(as.character(row['unitID']), as.character(row['cameraID']), as.character(row['date'])), collapse="_")
+        path <- file.path(CropsDir,subdir, as.character(row['filename']))
+        file.copy(path, file.path(outDir, name, 'positive', as.character(row['filename'])))
+    }
+
+    writeNegFiles <- function(row) {
+        subdir = paste(c(as.character(row['unitID']), as.character(row['cameraID']), as.character(row['date'])), collapse="_")
+        path <- file.path(CropsDir,subdir, as.character(row['filename']))
+        file.copy(path, file.path(outDir, name, 'negative', as.character(row['filename'])))
+    }
+
+    apply(negatives, 1, writeNegFiles)
+    apply(positives, 1, writePosFiles)
+}
+
+verifyRows <- by(runMe, seq_len(nrow(runMe)), verify)
+
+```
