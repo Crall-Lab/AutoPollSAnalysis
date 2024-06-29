@@ -6,11 +6,14 @@ output: html_document
 ---
 ```{r, include=FALSE}
 library(dplyr)
+library(lubridate)
+library(stringr)
+library(gridExtra)
 ```
 ### Directories with results
 ```{r}
-CSVdir <- '/run/user/1001/gvfs/ftp:host=bombus2.local/NetBackup/Cran_Autopoll_2023/testRun'
-CropsDir <- '/run/user/1001/gvfs/ftp:host=bombus2.local/NetBackup/Cran_Autopoll_2023/testCrops'
+CSVdir <- '/Volumes/NetBackup/Shade_NewModel/CSV'
+CropsDir <- '/Volumes/NetBackup/Shade_NewModel/Crops'
 ```
 
 ```{r, echo=FALSE}
@@ -23,22 +26,57 @@ if (length(CSVs) == 0) {
 # Read and combine CSV files
 allBees <- lapply(CSVs, read.csv) %>%
   bind_rows()
+
+allBees$class1[grepl('Bombus', allBees$class1)] <- 'Bombus'
+allBees$class1[grepl('Apis', allBees$class1)] <- 'Apis'
+
+
+#Add datetime
+pull_time <- function(fname){
+  x <- strsplit(fname, '_')[[1]][4] #Take out the fourth element of the filename after separating by hyphens
+  return(x)
+}
+#Pull timestamps from filename
+allBees$time <- sapply(allBees$filename, pull_time)
+
+#Create reference start time
+start.date <- parse_date_time('2023-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")
+allBees$timestamp <- paste(allBees$date, allBees$time, sep = "_")
+allBees$timestamp <- parse_date_time(allBees$timestamp, "ymd HMS")
+#Return timestamp vector as a numeric time since start date (in days)
+allBees$time.num <- as.numeric(difftime(allBees$timestamp, start.date, units = 'days'))
 ```
 
-### Occurance of insect groups
+```{r data viz}
+#Visualize confidence values
+ggplot(allBees, aes(x = conf, y = prob1))+stat_density_2d_filled(n = 200, show.legend = FALSE)
+
+#Detections over time
+ggplot(allBees, aes(time.num)) + geom_density()
+```
+
+### occurrence of insect groups
 ```{r}
-occurance <- data.frame(sort(table(allBees$class1), decreasing = TRUE))
-print(occurance)
-plot(occurance)
+occurrence <- data.frame(sort(table(allBees$class1), decreasing = TRUE))
+print(occurrence)
+plot(occurrence)
+
+## Alternative: subset to a particular group of species
+data_subset <- subset(allBees, conf > 0.8 & prob1 > 0.8)
+sort(table(data_subset$class1))
+
 ```
 
 ### Parameters to verify
 ```{r}
 detectionConf <- 0.8
 classificationConf <- 0.8
-minOccurance <- 100 #must have this many occurances to run verification
-sampleN <- 5 #number of files to copy for verification
-outDir <- 'Verify' #where to write jpgs for checking
+minoccurrence <- 100 #must have this many occurrences to run verification
+sampleN <- 100 #number of files to copy for verification
+outDir <- '/Users/jamescrall/Desktop/shade_verification_data'
+
+#Subset to specific species
+group_list <- c('Coleoptera', 'Diptera', 'Bombus', 'Apis', 'Syrphidae', 'Lepidoptera', 'Diptera', 'Wasp')
 ```
 
 ```{r, echo = FALSE}
@@ -46,7 +84,8 @@ if (!file.exists(outDir)) {
     dir.create(outDir)
 }
 
-runMe <- occurance[occurance$Freq > minOccurance,]
+#Subset to species with enough occurrences and 
+runMe <- occurrence[occurrence$Freq > minoccurrence & occurrence$Var1 %in% group_list,]
 
 verify <- function(x) {
     name <- as.character(x[1,1])
@@ -101,4 +140,15 @@ verify <- function(x) {
 
 verifyRows <- by(runMe, seq_len(nrow(runMe)), verify)
 
+```
+
+```{R visualize detections across days by group}
+
+data_subset <- subset(allBees, conf > 0.5 & prob1 > 0.5 & class1 %in% group_list)
+
+p1 <- ggplot(data_subset, aes(x = time.num, y = unique.camera, colour = class1))+geom_point(cex = 1.5, alpha = 0.2)
+
+p2 <- ggplot(data_subset, aes(x = time.num, colour = class1)) + geom_density() +xlim(182,240)
+
+grid.arrange(p1,p2)
 ```
