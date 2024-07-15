@@ -19,6 +19,7 @@ CropsDir <- '/Volumes/NetBackup/Shade_NewModel/Crops'
 
 ```{r, echo=FALSE}
 
+#Get list of '*_bees.csv') files output from model
 CSVs <- list.files(CSVdir, pattern = paste0('_bees.csv', "$"), full.names = TRUE)
 if (length(CSVs) == 0) {
   stop("No files found with the specified suffix.")
@@ -28,6 +29,7 @@ if (length(CSVs) == 0) {
 allBees <- lapply(CSVs, read.csv) %>%
   bind_rows()
 
+#Aggregate Apis and Bombus into genus-level categories
 allBees$class1[grepl('Bombus', allBees$class1)] <- 'Bombus'
 allBees$class1[grepl('Apis', allBees$class1)] <- 'Apis'
 
@@ -37,6 +39,7 @@ pull_time <- function(fname){
   x <- strsplit(fname, '_')[[1]][4] #Take out the fourth element of the filename after separating by hyphens
   return(x)
 }
+
 #Pull timestamps from filename
 allBees$time <- sapply(allBees$filename, pull_time)
 
@@ -44,20 +47,21 @@ allBees$time <- sapply(allBees$filename, pull_time)
 start.date <- parse_date_time('2023-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")
 allBees$timestamp <- paste(allBees$date, allBees$time, sep = "_")
 allBees$timestamp <- parse_date_time(allBees$timestamp, "ymd HMS")
+
 #Return timestamp vector as a numeric time since start date (in days)
 allBees$time.num <- as.numeric(difftime(allBees$timestamp, start.date, units = 'days'))
 ```
 
 ```{r data viz}
 #Visualize confidence values
-ggplot(allBees, aes(x = conf, y = prob1))+stat_density_2d_filled(show.legend = FALSE)
+#ggplot(allBees, aes(x = conf, y = prob1))+stat_density_2d_filled(show.legend = FALSE)
 
 #Detections over time
 ggplot(allBees, aes(time.num)) + geom_density()
 ```
 
 ### occurrence of insect groups
-```{r}
+```{r inspect classes in your dataset}
 occurrence <- data.frame(sort(table(allBees$class1), decreasing = TRUE))
 print(occurrence)
 plot(occurrence)
@@ -69,7 +73,7 @@ sort(table(data_subset$class1))
 ```
 
 ### Parameters to verify
-```{r}
+```{r set parameters for }
 detectionConf <- 0.8
 classificationConf <- 0.8
 minoccurrence <- 100 #must have this many occurrences to run verification
@@ -80,7 +84,7 @@ outDir <- '/Users/jamescrall/Desktop/shade_verification_data'
 group_list <- c('Coleoptera', 'Diptera', 'Bombus', 'Apis', 'Syrphidae', 'Lepidoptera', 'Diptera', 'Wasp')
 ```
 
-```{r, echo = FALSE}
+```{r output sample images for verification, echo = FALSE}
 if (!file.exists(outDir)) {
     dir.create(outDir)
 }
@@ -145,8 +149,10 @@ verifyRows <- by(runMe, seq_len(nrow(runMe)), verify)
 
 ```{R visualize detections across days by group}
 
+#Subset to detections above a threshold
 data_subset <- subset(allBees, conf > 0.5 & prob1 > 0.5 & class1 %in% group_list)
-
+data_subset$unique.camera <- paste(data_subset$unitID, data_subset$cameraID, sep = "_")
+#Create plot of detections over time by
 p1 <- ggplot(data_subset, aes(x = time.num, y = unique.camera, colour = class1))+geom_point(cex = 1.5, alpha = 0.2)
 
 p2 <- ggplot(data_subset, aes(x = time.num, colour = class1)) + geom_density() +xlim(182,240)
