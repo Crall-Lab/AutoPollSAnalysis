@@ -9,6 +9,7 @@ library(dplyr)
 library(lubridate)
 library(stringr)
 library(gridExtra)
+library(ggplot2)
 ```
 ### Directories with results
 ```{r}
@@ -49,7 +50,7 @@ allBees$time.num <- as.numeric(difftime(allBees$timestamp, start.date, units = '
 
 ```{r data viz}
 #Visualize confidence values
-ggplot(allBees, aes(x = conf, y = prob1))+stat_density_2d_filled(n = 200, show.legend = FALSE)
+ggplot(allBees, aes(x = conf, y = prob1))+stat_density_2d_filled(show.legend = FALSE)
 
 #Detections over time
 ggplot(allBees, aes(time.num)) + geom_density()
