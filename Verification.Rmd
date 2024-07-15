@@ -78,7 +78,7 @@ detectionConf <- 0.8
 classificationConf <- 0.8
 minoccurrence <- 100 #must have this many occurrences to run verification
 sampleN <- 100 #number of files to copy for verification
-outDir <- '/Users/jamescrall/Desktop/shade_verification_data'
+outDir <- '/Users/jamescrall/Desktop/shade_verification_data_2'
 
 #Subset to specific species
 group_list <- c('Coleoptera', 'Diptera', 'Bombus', 'Apis', 'Syrphidae', 'Lepidoptera', 'Diptera', 'Wasp')
@@ -152,10 +152,13 @@ verifyRows <- by(runMe, seq_len(nrow(runMe)), verify)
 #Subset to detections above a threshold
 data_subset <- subset(allBees, conf > 0.5 & prob1 > 0.5 & class1 %in% group_list)
 data_subset$unique.camera <- paste(data_subset$unitID, data_subset$cameraID, sep = "_")
-#Create plot of detections over time by
+
+#Create plot of detections over time by camera
 p1 <- ggplot(data_subset, aes(x = time.num, y = unique.camera, colour = class1))+geom_point(cex = 1.5, alpha = 0.2)
 
+#Overall density of detections by group
 p2 <- ggplot(data_subset, aes(x = time.num, colour = class1)) + geom_density() +xlim(182,240)
 
+#Plot
 grid.arrange(p1,p2)
 ```
