@@ -13,6 +13,7 @@ library(ggplot2)
 ```
 ### Directories with results
 ```{r}
+#Set directories: you may need to change these for your desktop depending on where 
 CSVdir <- '/Volumes/NetBackup/Shade_NewModel/CSV'
 CropsDir <- '/Volumes/NetBackup/Shade_NewModel/Crops'
 ```
@@ -78,7 +79,7 @@ detectionConf <- 0.8
 classificationConf <- 0.8
 minoccurrence <- 100 #must have this many occurrences to run verification
 sampleN <- 100 #number of files to copy for verification
-outDir <- '/Users/jamescrall/Desktop/shade_verification_data_2'
+outDir <- '/Users/jamescrall/Desktop/shade_verification_data_new' #Change for your machine
 
 #Subset to specific species
 group_list <- c('Coleoptera', 'Diptera', 'Bombus', 'Apis', 'Syrphidae', 'Lepidoptera', 'Diptera', 'Wasp')

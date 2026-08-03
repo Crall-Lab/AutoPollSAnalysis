@@ -21,13 +21,29 @@ So the data structure MUST be in the expected form.
 The code looks for subdirectories like this: `glob.glob(source+'/*/*/'+'stills'+'/*/*')`, and reads the information like this: `unitID, still, cameraID, date = subdir.split('/')[-4:]`
 
 
-### Edit script, part 1: detection model
-Detection model is defined in the code like so: `detectModel = YOLO(modelPath)` (line 19)
+### Model bundle
+The analysis expects model files to live outside the repository because they are too large for GitHub.
+By default, `autopollsStills.py` looks for a model bundle at:
+```
+~/Desktop/AutoPollSAnalysis_models_tmp
+```
 
-### Edit script, part 2: classification model
-Classification model is defined in the code like so: `keras.models.load_model(modelPath)` (line 80)
+The expected files inside that folder are:
+```
+AutoPollS_YOLOv11l_800_V0/weights/best.pt
+Bees_NorthAmerica/EfficientNetV2S_300_mixedprecision_AUTOPOLLS_mdl_wts_09_30_2025.h5
+Bees_NorthAmerica/CATEGORIES.txt
+```
 
-Put in list of strings of all categories  in chunk of code before classification model is defined: CATEGORIES = list()
+You can override the model folder in either of these ways:
+```
+AUTOPOLLS_MODEL_DIR=/path/to/AutoPollSAnalysis_models_tmp python AutoPollSAnalysis/autopollsStills.py path/to/Data path/to/write/CSVs path/to/write/Crops
+```
+
+or by passing it as the fourth command-line argument:
+```
+python AutoPollSAnalysis/autopollsStills.py path/to/Data path/to/write/CSVs path/to/write/Crops /path/to/AutoPollSAnalysis_models_tmp
+```
 
 ## Usage
 ### Running analysis on stills
@@ -57,7 +73,7 @@ While running, writes images to `./runs/detect/predict/crops/bee` (this folder i
 
 Output contains all detections and confidence
 
-Change threshold by changing this line `detectionThres = 0.25` (line 20)
+Change threshold by changing this line `detectionThres = 0.10` in `autopollsStills.py`.
 
 Classification results contains top 3 classes and confidence
 
