@@ -22,7 +22,7 @@ The code looks for subdirectories like this: `glob.glob(source+'/*/*/'+'stills'+
 
 
 ### Model bundle
-The analysis expects model files to live outside the repository because they are too large for GitHub.
+The analysis expects model files to live outside the repository because they are too large for GitHub. You can download the folder of model files [here](https://drive.google.com/file/d/1xsLxBCJhnFi8wejTF1V851t4TskNgAqn/view?usp=sharing).
 By default, `autopollsStills.py` looks for a model bundle at:
 ```
 ~/Desktop/AutoPollSAnalysis_models_tmp
