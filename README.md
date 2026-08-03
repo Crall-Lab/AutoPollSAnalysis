@@ -99,3 +99,4 @@ It also looks for cameraID:
 
 ## Maintainers
 Acacia Tang  -- [ttang53@wisc.edu](mailto:ttang53@wisc.edu)
+James Crall -- [james.crall@wisc.edu](mailto:james.crall@wisc.edu)
