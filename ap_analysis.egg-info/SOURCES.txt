@@ -1,0 +1,14 @@
+README.md
+autopollsStills.py
+main.py
+merge.py
+setup.py
+ap_analysis.egg-info/PKG-INFO
+ap_analysis.egg-info/SOURCES.txt
+ap_analysis.egg-info/dependency_links.txt
+ap_analysis.egg-info/entry_points.txt
+ap_analysis.egg-info/top_level.txt
+offline_analysis/__init__.py
+offline_analysis/ap_classifier.py
+offline_analysis/ap_detector.py
+offline_analysis/autopolls_utils.py

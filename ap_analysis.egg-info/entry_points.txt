@@ -1,0 +1,3 @@
+[console_scripts]
+ap_analysis = main:main
+autopolls-stills = autopollsStills:console_main
