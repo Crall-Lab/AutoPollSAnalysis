@@ -84,12 +84,19 @@ ap_analysis
 
 The GUI writes the same outputs as `autopollsStills.py`: one `*_detection.csv`, one `*_classification.csv`, one merged `*_bees.csv`, and one crop folder for each analyzed still-image subdirectory.
 
+Set **Detection confidence** between 0 and 1 to control which detector hits are saved as crops and output rows; its default is `0.10`. **Classification confidence** is the minimum probability required to accept the top predicted class; its default is `0.00`, preserving all class labels. Lower-confidence classifications remain in the CSV with their probabilities and are marked `classificationAccepted = False`; labeled videos display them as `Uncertain`.
+
 ### Video analysis
 Select a video file with **Browse video**, or select a parent folder containing videos. The analysis writes one `*_video_detections.csv` per video. Each row is one detection and includes the video path, zero-based frame number, timestamp in seconds, detector confidence, pixel bounding box, and top three classifier predictions.
 
 Enable **Write annotated videos** in the GUI to create a labeled MP4 alongside the CSVs. With the command line, add `--annotated-videos`; `--video-output path/to/videos` places those MP4 files in a separate folder:
 ```
 autopolls-stills path/to/video.mp4 path/to/write/CSVs path/to/write/Crops --annotated-videos
+```
+
+The same controls are available from the command line:
+```
+autopolls-stills path/to/Data path/to/write/CSVs path/to/write/Crops --detection-threshold 0.25 --classification-threshold 0.70
 ```
 
 Video CSV and MP4 names include a short path-derived suffix so videos with the same filename do not overwrite each other.

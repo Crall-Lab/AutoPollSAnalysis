@@ -29,6 +29,10 @@ class apGui:
         self.csv_path = tk.StringVar()
         self.crop_path = tk.StringVar()
         self.model_path = tk.StringVar(value=os.environ.get("AUTOPOLLS_MODEL_DIR", autopolls_utils.DEFAULT_MODEL_DIR))
+        self.detection_threshold = tk.StringVar(value=format(autopolls_utils.DETECTION_THRESHOLD, ".2f"))
+        self.classification_threshold = tk.StringVar(
+            value=format(autopolls_utils.CLASSIFICATION_THRESHOLD, ".2f")
+        )
         self.write_annotated_videos = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Select a still-image folder or a video, then run detect+classify.")
         self.messages = queue.Queue()
@@ -56,18 +60,20 @@ class apGui:
         self.add_folder_row(controls, 1, "CSV output", self.csv_path, self.browse_csv_output)
         self.add_folder_row(controls, 2, "Crop output", self.crop_path, self.browse_crop_output)
         self.add_folder_row(controls, 3, "Model bundle", self.model_path, self.browse_model)
+        self.add_value_row(controls, 4, "Detection confidence", self.detection_threshold)
+        self.add_value_row(controls, 5, "Classification confidence", self.classification_threshold)
 
         ttk.Checkbutton(
             controls,
             text="Write annotated videos",
             variable=self.write_annotated_videos,
-        ).grid(row=4, column=0, sticky="w", pady=(8, 0))
+        ).grid(row=6, column=0, sticky="w", pady=(8, 0))
 
         self.preview_button = ttk.Button(controls, text="Load preview images", command=self.load_preview_images)
-        self.preview_button.grid(row=5, column=1, sticky="e", padx=8, pady=(8, 0))
+        self.preview_button.grid(row=7, column=1, sticky="e", padx=8, pady=(8, 0))
 
         self.run_button = ttk.Button(controls, text="Run detect+classify", command=self.ap_analysis)
-        self.run_button.grid(row=5, column=2, sticky="e", pady=(8, 0))
+        self.run_button.grid(row=7, column=2, sticky="e", pady=(8, 0))
 
         list_frame = ttk.Frame(root_frame)
         list_frame.grid(row=1, column=0, sticky="nsew", pady=(12, 0))
@@ -101,6 +107,10 @@ class apGui:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=3)
         ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", padx=8, pady=3)
         ttk.Button(parent, text="Browse", command=command).grid(row=row, column=2, sticky="e", pady=3)
+
+    def add_value_row(self, parent, row, label, variable):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=3)
+        ttk.Entry(parent, textvariable=variable, width=12).grid(row=row, column=1, sticky="w", padx=8, pady=3)
 
     def browse_source(self):
         folder = filedialog.askdirectory()
@@ -197,21 +207,58 @@ class apGui:
             messagebox.showerror("Missing folders", "Select " + ", ".join(missing) + ".")
             return
 
+        try:
+            detection_threshold = autopolls_utils.validate_confidence(
+                self.detection_threshold.get(), "Detection"
+            )
+            classification_threshold = autopolls_utils.validate_confidence(
+                self.classification_threshold.get(), "Classification"
+            )
+        except ValueError as error:
+            messagebox.showerror("Invalid confidence", str(error))
+            return
+
         self.run_button.config(state="disabled")
         self.log_box.delete("1.0", tk.END)
         self.status.set("Analysis running...")
-        worker = threading.Thread(target=self.run_worker, daemon=True)
-        worker.start()
-
-    def run_worker(self):
-        try:
-            runner = ap_detector.intialize(self.model_path.get(), self.messages.put)
-            runner.main(
+        worker = threading.Thread(
+            target=self.run_worker,
+            args=(
                 self.source_path.get(),
                 self.csv_path.get(),
                 self.crop_path.get(),
-                write_annotated_videos=self.write_annotated_videos.get(),
-                video_home=self.csv_path.get(),
+                self.model_path.get(),
+                self.write_annotated_videos.get(),
+                detection_threshold,
+                classification_threshold,
+            ),
+            daemon=True,
+        )
+        worker.start()
+
+    def run_worker(
+        self,
+        source_path,
+        csv_path,
+        crop_path,
+        model_path,
+        write_annotated_videos,
+        detection_threshold,
+        classification_threshold,
+    ):
+        try:
+            runner = ap_detector.intialize(
+                model_path,
+                self.messages.put,
+                detection_threshold,
+                classification_threshold,
+            )
+            runner.main(
+                source_path,
+                csv_path,
+                crop_path,
+                write_annotated_videos=write_annotated_videos,
+                video_home=csv_path,
             )
             self.messages.put("DONE")
         except Exception as error:

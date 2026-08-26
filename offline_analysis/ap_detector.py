@@ -15,6 +15,7 @@ VIDEO_COLUMNS = [
     "frame",
     "timestamp_sec",
     "conf",
+    "detectionThreshold",
     "x",
     "y",
     "w",
@@ -29,22 +30,42 @@ VIDEO_COLUMNS = [
     "prob1",
     "prob2",
     "prob3",
+    "classificationThreshold",
+    "classificationAccepted",
     "annotatedVideo",
 ]
 
 
 class intialize:
-    def __init__(self, model_dir=None, progress=None):
+    def __init__(
+        self,
+        model_dir=None,
+        progress=None,
+        detection_threshold=None,
+        classification_threshold=None,
+    ):
         self.model_dir = model_dir or os.environ.get("AUTOPOLLS_MODEL_DIR", autopolls_utils.DEFAULT_MODEL_DIR)
         self.progress = progress
+        self.detection_threshold = autopolls_utils.validate_confidence(
+            autopolls_utils.DETECTION_THRESHOLD if detection_threshold is None else detection_threshold,
+            "Detection",
+        )
         autopolls_utils.validate_model_bundle(self.model_dir)
         detector_path = autopolls_utils.model_path(self.model_dir, autopolls_utils.DETECTOR_MODEL)
         self.device = autopolls_utils.detection_device()
         autopolls_utils.log("Loading detector from " + detector_path, self.progress)
         self.detect_model = YOLO(detector_path)
         autopolls_utils.log("Detector device: " + self.device, self.progress)
+        autopolls_utils.log(
+            "Detection confidence: " + format(self.detection_threshold, ".2f"),
+            self.progress,
+        )
         autopolls_utils.log("Loading classifier from " + self.model_dir, self.progress)
-        self.classifier = ap_classifier.intialize(self.model_dir, self.progress)
+        self.classifier = ap_classifier.intialize(
+            self.model_dir,
+            self.progress,
+            classification_threshold,
+        )
 
     def main(self, source, csv_home, crop_home, write_annotated_videos=False, video_home=None):
         os.makedirs(csv_home, exist_ok=True)
@@ -95,7 +116,7 @@ class intialize:
             try:
                 results = self.detect_model.predict(
                     image_path,
-                    conf=autopolls_utils.DETECTION_THRESHOLD,
+                    conf=self.detection_threshold,
                     device=self.device,
                     show=False,
                     verbose=False,
@@ -125,6 +146,7 @@ class intialize:
                         detections.append(
                             {
                                 "conf": conf[row],
+                                "detectionThreshold": self.detection_threshold,
                                 "x": xywh[row][0],
                                 "y": xywh[row][1],
                                 "w": xywh[row][2],
@@ -222,7 +244,7 @@ class intialize:
             try:
                 results = self.detect_model.predict(
                     frame,
-                    conf=autopolls_utils.DETECTION_THRESHOLD,
+                    conf=self.detection_threshold,
                     device=self.device,
                     show=False,
                     verbose=False,
@@ -255,13 +277,19 @@ class intialize:
                 classifications = self.classifier.classify_pil_images(crops)
                 for row_index, classification in enumerate(classifications):
                     box = xyxy[row_index]
-                    label = classification["class1"] + " " + str(round(float(classification["prob1"]), 3))
+                    label_name = (
+                        classification["class1"]
+                        if classification["classificationAccepted"]
+                        else "Uncertain"
+                    )
+                    label = label_name + " " + str(round(float(classification["prob1"]), 3))
                     rows.append(
                         {
                             "videoFile": video_path,
                             "frame": frame_index,
                             "timestamp_sec": timestamp_sec,
                             "conf": conf[row_index],
+                            "detectionThreshold": self.detection_threshold,
                             "x": xywh[row_index][0],
                             "y": xywh[row_index][1],
                             "w": xywh[row_index][2],
@@ -276,6 +304,8 @@ class intialize:
                             "prob1": classification["prob1"],
                             "prob2": classification["prob2"],
                             "prob3": classification["prob3"],
+                            "classificationThreshold": classification["classificationThreshold"],
+                            "classificationAccepted": classification["classificationAccepted"],
                         }
                     )
 

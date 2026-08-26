@@ -7,6 +7,7 @@ CLASSIFIER_MODEL = "Bees_NorthAmerica/EfficientNetV2S_300_mixedprecision_AUTOPOL
 CATEGORIES_FILE = "Bees_NorthAmerica/CATEGORIES.txt"
 
 DETECTION_THRESHOLD = 0.10
+CLASSIFICATION_THRESHOLD = 0.00
 IMG_SIZE = 300
 VIDEO_EXTENSIONS = (".avi", ".mp4", ".mov", ".m4v", ".mkv")
 
@@ -15,6 +16,16 @@ def log(message, callback=None):
     print(message)
     if callback is not None:
         callback(message)
+
+
+def validate_confidence(value, label):
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(label + " confidence must be a number from 0 to 1") from error
+    if not 0 <= confidence <= 1:
+        raise ValueError(label + " confidence must be a number from 0 to 1")
+    return confidence
 
 
 def model_path(model_dir, relative_path):
