@@ -1,5 +1,5 @@
 import os
-
+from hashlib import sha1
 
 DEFAULT_MODEL_DIR = os.path.expanduser("~/Desktop/AutoPollSAnalysis_models_tmp")
 DETECTOR_MODEL = "AutoPollS_YOLOv11l_800_V0/weights/best.pt"
@@ -8,6 +8,7 @@ CATEGORIES_FILE = "Bees_NorthAmerica/CATEGORIES.txt"
 
 DETECTION_THRESHOLD = 0.10
 IMG_SIZE = 300
+VIDEO_EXTENSIONS = (".avi", ".mp4", ".mov", ".m4v", ".mkv")
 
 
 def log(message, callback=None):
@@ -61,6 +62,38 @@ def still_subdirectories(source):
             matches.append(root)
 
     return sorted(matches)
+
+
+def video_files(source):
+    source = source.rstrip(os.sep)
+    if os.path.isfile(source):
+        return [source] if source.lower().endswith(VIDEO_EXTENSIONS) else []
+
+    matches = []
+    for root, dirs, files in os.walk(source):
+        for filename in files:
+            if filename.lower().endswith(VIDEO_EXTENSIONS):
+                matches.append(os.path.join(root, filename))
+    return sorted(matches)
+
+
+def video_output_stem(video_path):
+    stem = os.path.splitext(os.path.basename(video_path))[0]
+    identifier = sha1(os.path.abspath(video_path).encode("utf-8")).hexdigest()[:10]
+    return stem + "_" + identifier
+
+
+def detection_device():
+    import torch
+
+    configured = os.environ.get("AUTOPOLLS_DEVICE")
+    if configured:
+        return configured
+    if torch.cuda.is_available():
+        return "0"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 def is_still_date_directory(path):

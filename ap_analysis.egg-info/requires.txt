@@ -1,0 +1,8 @@
+torch==2.7.0
+ultralytics==8.3.63
+matplotlib
+tensorflow==2.17.0
+pandas
+pillow
+h5py
+opencv-python

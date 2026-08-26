@@ -1,8 +1,15 @@
 import os
 import queue
 import threading
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+except ModuleNotFoundError as error:
+    raise SystemExit(
+        "The AutoPollS GUI requires Tk. Install the Tk package for your Python "
+        "environment, or use the autopolls-stills command-line runner."
+    ) from error
 
 from PIL import Image, ImageTk
 
@@ -22,7 +29,8 @@ class apGui:
         self.csv_path = tk.StringVar()
         self.crop_path = tk.StringVar()
         self.model_path = tk.StringVar(value=os.environ.get("AUTOPOLLS_MODEL_DIR", autopolls_utils.DEFAULT_MODEL_DIR))
-        self.status = tk.StringVar(value="Select folders, then run detect+classify.")
+        self.write_annotated_videos = tk.BooleanVar(value=False)
+        self.status = tk.StringVar(value="Select a still-image folder or a video, then run detect+classify.")
         self.messages = queue.Queue()
         self.image_files = []
         self.current_image = None
@@ -42,15 +50,24 @@ class apGui:
         controls.columnconfigure(1, weight=1)
 
         self.add_folder_row(controls, 0, "Source data", self.source_path, self.browse_source)
+        ttk.Button(controls, text="Browse video", command=self.browse_source_video).grid(
+            row=0, column=3, sticky="e", padx=(8, 0), pady=3
+        )
         self.add_folder_row(controls, 1, "CSV output", self.csv_path, self.browse_csv_output)
         self.add_folder_row(controls, 2, "Crop output", self.crop_path, self.browse_crop_output)
         self.add_folder_row(controls, 3, "Model bundle", self.model_path, self.browse_model)
 
+        ttk.Checkbutton(
+            controls,
+            text="Write annotated videos",
+            variable=self.write_annotated_videos,
+        ).grid(row=4, column=0, sticky="w", pady=(8, 0))
+
         self.preview_button = ttk.Button(controls, text="Load preview images", command=self.load_preview_images)
-        self.preview_button.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
+        self.preview_button.grid(row=5, column=1, sticky="e", padx=8, pady=(8, 0))
 
         self.run_button = ttk.Button(controls, text="Run detect+classify", command=self.ap_analysis)
-        self.run_button.grid(row=4, column=2, sticky="e", pady=(8, 0))
+        self.run_button.grid(row=5, column=2, sticky="e", pady=(8, 0))
 
         list_frame = ttk.Frame(root_frame)
         list_frame.grid(row=1, column=0, sticky="nsew", pady=(12, 0))
@@ -96,6 +113,22 @@ class apGui:
         self.current_image = None
         self.status.set("Source selected. Preview image loading is optional.")
 
+    def browse_source_video(self):
+        video = filedialog.askopenfilename(
+            filetypes=[
+                ("Video files", "*.avi *.mp4 *.mov *.m4v *.mkv"),
+                ("All files", "*.*"),
+            ]
+        )
+        if not video:
+            return
+        self.source_path.set(video)
+        self.image_files = []
+        self.listbox.delete(0, tk.END)
+        self.image_label.config(image="")
+        self.current_image = None
+        self.status.set("Source video selected. Annotated videos are optional.")
+
     def browse_csv_output(self):
         folder = filedialog.askdirectory()
         if folder:
@@ -115,6 +148,9 @@ class apGui:
         folder = self.source_path.get()
         if not folder:
             messagebox.showerror("Missing source", "Select source data first.")
+            return
+        if os.path.isfile(folder):
+            self.status.set("Preview image loading is available for folders, not individual videos.")
             return
         if self.preview_loading:
             return
@@ -170,7 +206,13 @@ class apGui:
     def run_worker(self):
         try:
             runner = ap_detector.intialize(self.model_path.get(), self.messages.put)
-            runner.main(self.source_path.get(), self.csv_path.get(), self.crop_path.get())
+            runner.main(
+                self.source_path.get(),
+                self.csv_path.get(),
+                self.crop_path.get(),
+                write_annotated_videos=self.write_annotated_videos.get(),
+                video_home=self.csv_path.get(),
+            )
             self.messages.put("DONE")
         except Exception as error:
             self.messages.put("ERROR: " + str(error))

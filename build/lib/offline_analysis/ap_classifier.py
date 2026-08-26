@@ -32,21 +32,51 @@ class intialize:
 
     def classify_image(self, path):
         with Image.open(path) as image:
-            image = image.convert("RGB").resize((autopolls_utils.IMG_SIZE, autopolls_utils.IMG_SIZE))
-            image_array = np.asarray(image, dtype=np.float32) / 255.0
+            result = self.classify_pil_image(image)
+        result["filename"] = os.path.basename(path)
+        return result
 
-        probabilities = self.new_model.predict(np.array([image_array]), verbose=0)[0, :]
-        index = np.argsort(probabilities)
-        return {
-            "filename": os.path.basename(path),
-            "class1": self.classes[index[-1]],
-            "class2": self.classes[index[-2]],
-            "class3": self.classes[index[-3]],
-            "prob1": probabilities[index[-1]],
-            "prob2": probabilities[index[-2]],
-            "prob3": probabilities[index[-3]],
-        }
+    def classify_pil_image(self, image):
+        return self.classify_pil_images([image])[0]
+
+    def classify_pil_images(self, images):
+        if not images:
+            return []
+
+        image_arrays = [
+            np.asarray(
+                image.convert("RGB").resize((autopolls_utils.IMG_SIZE, autopolls_utils.IMG_SIZE)),
+                dtype=np.float32,
+            )
+            / 255.0
+            for image in images
+        ]
+        probabilities = self.new_model.predict(np.asarray(image_arrays), verbose=0)
+        results = []
+        for probability in probabilities:
+            index = np.argsort(probability)
+            results.append(
+                {
+                    "class1": self.classes[index[-1]],
+                    "class2": self.classes[index[-2]],
+                    "class3": self.classes[index[-3]],
+                    "prob1": probability[index[-1]],
+                    "prob2": probability[index[-2]],
+                    "prob3": probability[index[-3]],
+                }
+            )
+        return results
 
     def classifier_run(self, files):
-        return pd.DataFrame([self.classify_image(path) for path in files])
-
+        records = []
+        batch_size = 64
+        for start in range(0, len(files), batch_size):
+            paths = files[start : start + batch_size]
+            images = []
+            for path in paths:
+                with Image.open(path) as image:
+                    images.append(image.convert("RGB"))
+            for path, result in zip(paths, self.classify_pil_images(images)):
+                result["filename"] = os.path.basename(path)
+                records.append(result)
+        return pd.DataFrame(records)
