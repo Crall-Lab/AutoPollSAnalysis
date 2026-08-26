@@ -138,14 +138,13 @@ class intialize:
         detection_df = pd.DataFrame(detections)
         crop_paths = [os.path.join(crop_dir, filename) for filename in detection_df["filename"]]
         classification_df = self.classifier.classifier_run(crop_paths)
-        classification_df = classification_df.set_index("filename", drop=False)
         bees_df = detection_df.merge(classification_df, on="filename")
         bees_df["unitID"] = unit_id
         bees_df["cameraID"] = camera_id
         bees_df["date"] = date
 
         detection_df.to_csv(os.path.join(csv_home, stem + "_detection.csv"))
-        classification_df.to_csv(os.path.join(csv_home, stem + "_classification.csv"))
+        classification_df.to_csv(os.path.join(csv_home, stem + "_classification.csv"), index=False)
         bees_df.to_csv(final_csv)
         return 0
 
