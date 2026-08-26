@@ -44,7 +44,7 @@ class intialize:
         self.detect_model = YOLO(detector_path)
         autopolls_utils.log("Detector device: " + self.device, self.progress)
         autopolls_utils.log("Loading classifier from " + self.model_dir, self.progress)
-        self.classifier = ap_classifier.intialize(self.model_dir)
+        self.classifier = ap_classifier.intialize(self.model_dir, self.progress)
 
     def main(self, source, csv_home, crop_home, write_annotated_videos=False, video_home=None):
         os.makedirs(csv_home, exist_ok=True)

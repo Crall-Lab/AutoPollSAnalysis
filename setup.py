@@ -12,7 +12,7 @@ REQUIREMENTS = [
 
 setup(
     name="ap_analysis",
-    version="0.2",
+    version="0.3",
     py_modules=["main", "autopollsStills", "merge"],
     packages=find_packages(),
     install_requires=REQUIREMENTS,

@@ -3,18 +3,39 @@ import os
 import numpy as np
 import pandas as pd
 from PIL import Image
+import tensorflow as tf
 from tensorflow.keras.models import load_model
 
 from offline_analysis import autopolls_utils
 
 
 class intialize:
-    def __init__(self, model_dir=None):
+    def __init__(self, model_dir=None, progress=None):
         self.model_dir = model_dir or autopolls_utils.DEFAULT_MODEL_DIR
+        self.device = self.configure_device()
+        autopolls_utils.log("Classifier device: " + self.device, progress)
         classifier_path = autopolls_utils.model_path(self.model_dir, autopolls_utils.CLASSIFIER_MODEL)
         autopolls_utils.fix_legacy_keras_groups(classifier_path)
         self.new_model = load_model(classifier_path, compile=False)
+        # XLA JIT can fail on otherwise usable older NVIDIA GPU architectures.
+        if hasattr(self.new_model, "jit_compile"):
+            self.new_model.jit_compile = False
         self.classes = autopolls_utils.load_categories(self.model_dir)
+
+    def configure_device(self):
+        requested = os.environ.get("AUTOPOLLS_CLASSIFIER_DEVICE", "auto").lower()
+        if requested not in {"auto", "cpu", "gpu"}:
+            raise ValueError(
+                "AUTOPOLLS_CLASSIFIER_DEVICE must be one of: auto, cpu, gpu"
+            )
+
+        gpus = tf.config.list_physical_devices("GPU")
+        if requested == "cpu":
+            tf.config.set_visible_devices([], "GPU")
+            return "CPU (requested)"
+        if requested == "gpu" and not gpus:
+            raise RuntimeError("Classifier GPU requested, but TensorFlow cannot see a GPU")
+        return "GPU:0" if gpus else "CPU"
 
     def mapDirectory(self, directory):
         autopolls_utils.log("###########################")
