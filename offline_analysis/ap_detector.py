@@ -80,10 +80,17 @@ class intialize:
         crop_dir = os.path.join(crop_home, stem)
         os.makedirs(crop_dir, exist_ok=True)
         detections = []
+        image_paths = sorted(
+            path
+            for path in glob.glob(os.path.join(subdir, "*"))
+            if path.lower().endswith((".jpg", ".jpeg", ".png"))
+        )
+        autopolls_utils.log(
+            stem + ": processing " + str(len(image_paths)) + " still images",
+            self.progress,
+        )
 
-        for image_path in glob.glob(os.path.join(subdir, "*")):
-            if not image_path.lower().endswith((".jpg", ".jpeg", ".png")):
-                continue
+        for image_index, image_path in enumerate(image_paths, start=1):
             time = image_path.split("_")[-6]
             try:
                 results = self.detect_model.predict(
@@ -129,6 +136,19 @@ class intialize:
                             }
                         )
 
+            if image_index % 100 == 0 or image_index == len(image_paths):
+                autopolls_utils.log(
+                    stem
+                    + ": processed "
+                    + str(image_index)
+                    + "/"
+                    + str(len(image_paths))
+                    + " images; "
+                    + str(len(detections))
+                    + " detections",
+                    self.progress,
+                )
+
         if not detections:
             if os.path.isdir(crop_dir):
                 shutil.rmtree(crop_dir)
@@ -137,6 +157,10 @@ class intialize:
 
         detection_df = pd.DataFrame(detections)
         crop_paths = [os.path.join(crop_dir, filename) for filename in detection_df["filename"]]
+        autopolls_utils.log(
+            stem + ": classifying " + str(len(crop_paths)) + " detections",
+            self.progress,
+        )
         classification_df = self.classifier.classifier_run(crop_paths)
         bees_df = detection_df.merge(classification_df, on="filename")
         bees_df["unitID"] = unit_id
@@ -146,6 +170,7 @@ class intialize:
         detection_df.to_csv(os.path.join(csv_home, stem + "_detection.csv"))
         classification_df.to_csv(os.path.join(csv_home, stem + "_classification.csv"), index=False)
         bees_df.to_csv(final_csv)
+        autopolls_utils.log(stem + ": wrote analysis output", self.progress)
         return 0
 
     def analyze_video(self, video_path, csv_home, write_annotated_video=False, video_home=None):
