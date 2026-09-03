@@ -4,7 +4,7 @@ import shutil
 
 import cv2
 import pandas as pd
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from ultralytics import YOLO
 
 from offline_analysis import ap_classifier, autopolls_utils
@@ -34,6 +34,12 @@ VIDEO_COLUMNS = [
     "classificationAccepted",
     "annotatedVideo",
 ]
+
+
+def load_rgb_image(image_path):
+    with Image.open(image_path) as image:
+        image.load()
+        return image.convert("RGB")
 
 
 class intialize:
@@ -114,8 +120,17 @@ class intialize:
         for image_index, image_path in enumerate(image_paths, start=1):
             time = image_path.split("_")[-6]
             try:
+                image = load_rgb_image(image_path)
+            except (UnidentifiedImageError, OSError, ValueError) as error:
+                autopolls_utils.log(
+                    "Skipping unreadable image " + image_path + ": " + str(error),
+                    self.progress,
+                )
+                continue
+
+            try:
                 results = self.detect_model.predict(
-                    image_path,
+                    image,
                     conf=self.detection_threshold,
                     device=self.device,
                     show=False,
@@ -129,34 +144,39 @@ class intialize:
                 if len(result.boxes.conf) == 0:
                     continue
 
-                with Image.open(result.path) as image:
-                    image = image.convert("RGB")
-                    xywh = result.boxes.xywh.cpu().numpy()
-                    xyxy = result.boxes.xyxy.cpu().numpy()
-                    conf = result.boxes.conf.cpu().numpy()
-                    short = os.path.basename(result.path).split(".")[0]
-                    suffix = [""] + [str(index + 2) for index in range(len(result) - 1)]
+                xywh = result.boxes.xywh.cpu().numpy()
+                xyxy = result.boxes.xyxy.cpu().numpy()
+                conf = result.boxes.conf.cpu().numpy()
+                short = os.path.splitext(os.path.basename(image_path))[0]
+                suffix = [""] + [str(index + 2) for index in range(len(result) - 1)]
 
-                    for row in range(len(result)):
-                        filename = short + suffix[row] + ".jpg"
-                        crop_path = os.path.join(crop_dir, filename)
-                        box = xyxy[row]
-                        crop = image.crop((box[0], box[1], box[2], box[3]))
+                for row in range(len(result)):
+                    filename = short + suffix[row] + ".jpg"
+                    crop_path = os.path.join(crop_dir, filename)
+                    box = xyxy[row]
+                    crop = image.crop((box[0], box[1], box[2], box[3]))
+                    try:
                         crop.save(crop_path)
-                        detections.append(
-                            {
-                                "conf": conf[row],
-                                "detectionThreshold": self.detection_threshold,
-                                "x": xywh[row][0],
-                                "y": xywh[row][1],
-                                "w": xywh[row][2],
-                                "h": xywh[row][3],
-                                "originalFile": result.path,
-                                "short": short,
-                                "filename": filename,
-                                "time": time,
-                            }
+                    except OSError as error:
+                        autopolls_utils.log(
+                            "Skipping unreadable crop from " + image_path + ": " + str(error),
+                            self.progress,
                         )
+                        continue
+                    detections.append(
+                        {
+                            "conf": conf[row],
+                            "detectionThreshold": self.detection_threshold,
+                            "x": xywh[row][0],
+                            "y": xywh[row][1],
+                            "w": xywh[row][2],
+                            "h": xywh[row][3],
+                            "originalFile": image_path,
+                            "short": short,
+                            "filename": filename,
+                            "time": time,
+                        }
+                    )
 
             if image_index % 100 == 0 or image_index == len(image_paths):
                 autopolls_utils.log(

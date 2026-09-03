@@ -84,6 +84,8 @@ ap_analysis
 
 The GUI writes the same outputs as `autopollsStills.py`: one `*_detection.csv`, one `*_classification.csv`, one merged `*_bees.csv`, and one crop folder for each analyzed still-image subdirectory.
 
+Unreadable or truncated still images are logged and skipped so the remaining images in the selected source can continue processing.
+
 Set **Detection confidence** between 0 and 1 to control which detector hits are saved as crops and output rows; its default is `0.10`. **Classification confidence** is the minimum probability required to accept the top predicted class; its default is `0.00`, preserving all class labels. Lower-confidence classifications remain in the CSV with their probabilities and are marked `classificationAccepted = False`; labeled videos display them as `Uncertain`.
 
 ### Video analysis
