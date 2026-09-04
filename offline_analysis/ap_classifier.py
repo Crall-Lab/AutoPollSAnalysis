@@ -45,7 +45,15 @@ class intialize:
             return "CPU (requested)"
         if requested == "gpu" and not gpus:
             raise RuntimeError("Classifier GPU requested, but TensorFlow cannot see a GPU")
-        return "GPU:0" if gpus else "CPU"
+        if not gpus:
+            return "CPU"
+
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError:
+            return "GPU:0 (memory growth unavailable)"
+        return "GPU:0 (memory growth enabled)"
 
     def mapDirectory(self, directory):
         autopolls_utils.log("###########################")

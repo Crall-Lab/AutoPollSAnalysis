@@ -4,7 +4,7 @@ import shutil
 
 import cv2
 import pandas as pd
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 from ultralytics import YOLO
 
 from offline_analysis import ap_classifier, autopolls_utils
@@ -121,7 +121,7 @@ class intialize:
             time = image_path.split("_")[-6]
             try:
                 image = load_rgb_image(image_path)
-            except (UnidentifiedImageError, OSError, ValueError) as error:
+            except Exception as error:
                 autopolls_utils.log(
                     "Skipping unreadable image " + image_path + ": " + str(error),
                     self.progress,

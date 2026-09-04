@@ -32,7 +32,7 @@ This adds the `ap_analysis` GUI command and the `autopolls-stills` command-line 
 
 The detector chooses Apple Metal (`mps`) on supported M-series Macs, CUDA on supported Linux machines, and CPU otherwise. Set `AUTOPOLLS_DEVICE=cpu` (or another Ultralytics device value) before launching the GUI or command-line runner to override that choice.
 
-The TensorFlow classifier uses a visible GPU automatically, but disables Keras XLA JIT for wider compatibility with older NVIDIA cards. If classifier GPU inference is unstable, launch with `AUTOPOLLS_CLASSIFIER_DEVICE=cpu ap_analysis`; this keeps the YOLO detector on its selected GPU while the classifier runs on CPU.
+The TensorFlow classifier uses a visible GPU automatically, enables incremental GPU-memory allocation so it can share a GPU with YOLO, and disables Keras XLA JIT for wider compatibility with older NVIDIA cards. If classifier GPU inference is unstable or GPU memory is limited, launch with `AUTOPOLLS_CLASSIFIER_DEVICE=cpu ap_analysis`; this keeps the YOLO detector on its selected GPU while the classifier runs on CPU.
 
 
 ### Model bundle
