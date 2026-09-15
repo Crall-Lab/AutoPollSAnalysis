@@ -19,6 +19,7 @@ def run_analysis(
     video_home=None,
     detection_threshold=None,
     classification_threshold=None,
+    generic_images=False,
 ):
     model_dir = model_dir or os.environ.get("AUTOPOLLS_MODEL_DIR", DEFAULT_MODEL_DIR)
     runner = ap_detector.intialize(
@@ -27,7 +28,14 @@ def run_analysis(
         detection_threshold,
         classification_threshold,
     )
-    return runner.main(source, home, cropHome, write_annotated_videos, video_home)
+    return runner.main(
+        source,
+        home,
+        cropHome,
+        write_annotated_videos,
+        video_home,
+        generic_images,
+    )
 
 
 def main(args):
@@ -42,6 +50,11 @@ def main(args):
         help="Write labeled MP4 videos beside the CSV output by default",
     )
     parser.add_argument("--video-output", help="Folder for labeled MP4 videos")
+    parser.add_argument(
+        "--all-images",
+        action="store_true",
+        help="Analyze all supported images recursively without AutoPollS path parsing",
+    )
     parser.add_argument(
         "--detection-threshold",
         type=float,
@@ -64,6 +77,7 @@ def main(args):
         video_home=parsed.video_output,
         detection_threshold=parsed.detection_threshold,
         classification_threshold=parsed.classification_threshold,
+        generic_images=parsed.all_images,
     )
 
 

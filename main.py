@@ -33,6 +33,7 @@ class apGui:
         self.classification_threshold = tk.StringVar(
             value=format(autopolls_utils.CLASSIFICATION_THRESHOLD, ".2f")
         )
+        self.generic_image_search = tk.BooleanVar(value=False)
         self.write_annotated_videos = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Select a still-image folder or a video, then run detect+classify.")
         self.messages = queue.Queue()
@@ -65,9 +66,15 @@ class apGui:
 
         ttk.Checkbutton(
             controls,
+            text="Analyze all images recursively",
+            variable=self.generic_image_search,
+        ).grid(row=6, column=0, sticky="w", pady=(8, 0))
+
+        ttk.Checkbutton(
+            controls,
             text="Write annotated videos",
             variable=self.write_annotated_videos,
-        ).grid(row=6, column=0, sticky="w", pady=(8, 0))
+        ).grid(row=6, column=1, sticky="w", padx=8, pady=(8, 0))
 
         self.preview_button = ttk.Button(controls, text="Load preview images", command=self.load_preview_images)
         self.preview_button.grid(row=7, column=1, sticky="e", padx=8, pady=(8, 0))
@@ -228,6 +235,7 @@ class apGui:
                 self.csv_path.get(),
                 self.crop_path.get(),
                 self.model_path.get(),
+                self.generic_image_search.get(),
                 self.write_annotated_videos.get(),
                 detection_threshold,
                 classification_threshold,
@@ -242,6 +250,7 @@ class apGui:
         csv_path,
         crop_path,
         model_path,
+        generic_image_search,
         write_annotated_videos,
         detection_threshold,
         classification_threshold,
@@ -259,6 +268,7 @@ class apGui:
                 crop_path,
                 write_annotated_videos=write_annotated_videos,
                 video_home=csv_path,
+                generic_images=generic_image_search,
             )
             self.messages.put("DONE")
         except Exception as error:

@@ -9,6 +9,7 @@ CATEGORIES_FILE = "Bees_NorthAmerica/CATEGORIES.txt"
 DETECTION_THRESHOLD = 0.10
 CLASSIFICATION_THRESHOLD = 0.00
 IMG_SIZE = 300
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp")
 VIDEO_EXTENSIONS = (".avi", ".mp4", ".mov", ".m4v", ".mkv")
 
 
@@ -75,6 +76,19 @@ def still_subdirectories(source):
     return sorted(matches)
 
 
+def image_files(source):
+    source = source.rstrip(os.sep)
+    if os.path.isfile(source):
+        return [source] if source.lower().endswith(IMAGE_EXTENSIONS) else []
+
+    matches = []
+    for root, dirs, files in os.walk(source):
+        for filename in files:
+            if filename.lower().endswith(IMAGE_EXTENSIONS):
+                matches.append(os.path.join(root, filename))
+    return sorted(matches)
+
+
 def video_files(source):
     source = source.rstrip(os.sep)
     if os.path.isfile(source):
@@ -91,6 +105,13 @@ def video_files(source):
 def video_output_stem(video_path):
     stem = os.path.splitext(os.path.basename(video_path))[0]
     identifier = sha1(os.path.abspath(video_path).encode("utf-8")).hexdigest()[:10]
+    return stem + "_" + identifier
+
+
+def generic_image_output_stem(source):
+    source = source.rstrip(os.sep)
+    stem = os.path.splitext(os.path.basename(source))[0] or "images"
+    identifier = sha1(os.path.abspath(source).encode("utf-8")).hexdigest()[:10]
     return stem + "_" + identifier
 
 

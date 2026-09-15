@@ -34,6 +34,24 @@ The detector chooses Apple Metal (`mps`) on supported M-series Macs, CUDA on sup
 
 The TensorFlow classifier uses a visible GPU automatically, enables incremental GPU-memory allocation so it can share a GPU with YOLO, and disables Keras XLA JIT for wider compatibility with older NVIDIA cards. If classifier GPU inference is unstable or GPU memory is limited, launch with `AUTOPOLLS_CLASSIFIER_DEVICE=cpu ap_analysis`; this keeps the YOLO detector on its selected GPU while the classifier runs on CPU.
 
+#### Apple Silicon classifier acceleration
+On an M-series Mac, install Apple's optional TensorFlow Metal plugin after installing the project requirements:
+```
+python -m pip install tensorflow-metal
+```
+
+Confirm that TensorFlow can access the GPU:
+```
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+```
+
+If this lists `GPU:0`, the classifier will use it automatically. To require classifier GPU use when launching the GUI, run:
+```
+AUTOPOLLS_CLASSIFIER_DEVICE=gpu ap_analysis
+```
+
+`tensorflow-metal` is deliberately not included in `requirements.txt`, because it is only applicable to supported macOS systems. The YOLO detector continues to use PyTorch's `mps` device independently.
+
 
 ### Model bundle
 The analysis expects model files to live outside the repository because they are too large for GitHub. You can download the folder of model files [here](https://drive.google.com/file/d/1xsLxBCJhnFi8wejTF1V851t4TskNgAqn/view?usp=sharing).
@@ -88,6 +106,9 @@ Unreadable or truncated still images are logged and skipped so the remaining ima
 
 Set **Detection confidence** between 0 and 1 to control which detector hits are saved as crops and output rows; its default is `0.10`. **Classification confidence** is the minimum probability required to accept the top predicted class; its default is `0.00`, preserving all class labels. Lower-confidence classifications remain in the CSV with their probabilities and are marked `classificationAccepted = False`; labeled videos display them as `Uncertain`.
 
+### Generic image-folder analysis
+The default workflow expects AutoPollS still-image folders shaped like `<unitID>/stills/<cameraID>/<date>`. Enable **Analyze all images recursively** to analyze supported images in every subfolder of the selected source instead. This mode creates one `*_generic_bees.csv` containing source-file information, detection values, and classification results only; it does not infer AutoPollS unit, camera, date, or time fields. Detection crops are still written under a source-specific folder within the selected crop-output location.
+
 ### Video analysis
 Select a video file with **Browse video**, or select a parent folder containing videos. The analysis writes one `*_video_detections.csv` per video. Each row is one detection and includes the video path, zero-based frame number, timestamp in seconds, detector confidence, pixel bounding box, and top three classifier predictions.
 
@@ -99,6 +120,11 @@ autopolls-stills path/to/video.mp4 path/to/write/CSVs path/to/write/Crops --anno
 The same controls are available from the command line:
 ```
 autopolls-stills path/to/Data path/to/write/CSVs path/to/write/Crops --detection-threshold 0.25 --classification-threshold 0.70
+```
+
+Add `--all-images` to use generic image-folder analysis from the command line:
+```
+autopolls-stills path/to/images path/to/write/CSVs path/to/write/Crops --all-images
 ```
 
 Video CSV and MP4 names include a short path-derived suffix so videos with the same filename do not overwrite each other.

@@ -15,6 +15,7 @@ VIDEO_COLUMNS = [
     "frame",
     "timestamp_sec",
     "conf",
+    "detectionThreshold",
     "x",
     "y",
     "w",
@@ -29,25 +30,91 @@ VIDEO_COLUMNS = [
     "prob1",
     "prob2",
     "prob3",
+    "classificationThreshold",
+    "classificationAccepted",
     "annotatedVideo",
 ]
 
+GENERIC_IMAGE_COLUMNS = [
+    "sourceFile",
+    "sourceFilename",
+    "detectionIndex",
+    "conf",
+    "detectionThreshold",
+    "x",
+    "y",
+    "w",
+    "h",
+    "x_min",
+    "y_min",
+    "x_max",
+    "y_max",
+    "class1",
+    "class2",
+    "class3",
+    "prob1",
+    "prob2",
+    "prob3",
+    "classificationThreshold",
+    "classificationAccepted",
+]
+
+
+def load_rgb_image(image_path):
+    with Image.open(image_path) as image:
+        image.load()
+        return image.convert("RGB")
+
 
 class intialize:
-    def __init__(self, model_dir=None, progress=None):
+    def __init__(
+        self,
+        model_dir=None,
+        progress=None,
+        detection_threshold=None,
+        classification_threshold=None,
+    ):
         self.model_dir = model_dir or os.environ.get("AUTOPOLLS_MODEL_DIR", autopolls_utils.DEFAULT_MODEL_DIR)
         self.progress = progress
+        self.detection_threshold = autopolls_utils.validate_confidence(
+            autopolls_utils.DETECTION_THRESHOLD if detection_threshold is None else detection_threshold,
+            "Detection",
+        )
         autopolls_utils.validate_model_bundle(self.model_dir)
         detector_path = autopolls_utils.model_path(self.model_dir, autopolls_utils.DETECTOR_MODEL)
         self.device = autopolls_utils.detection_device()
         autopolls_utils.log("Loading detector from " + detector_path, self.progress)
         self.detect_model = YOLO(detector_path)
         autopolls_utils.log("Detector device: " + self.device, self.progress)
+        autopolls_utils.log(
+            "Detection confidence: " + format(self.detection_threshold, ".2f"),
+            self.progress,
+        )
         autopolls_utils.log("Loading classifier from " + self.model_dir, self.progress)
-        self.classifier = ap_classifier.intialize(self.model_dir)
+        self.classifier = ap_classifier.intialize(
+            self.model_dir,
+            self.progress,
+            classification_threshold,
+        )
 
-    def main(self, source, csv_home, crop_home, write_annotated_videos=False, video_home=None):
+    def main(
+        self,
+        source,
+        csv_home,
+        crop_home=None,
+        write_annotated_videos=False,
+        video_home=None,
+        generic_images=False,
+    ):
         os.makedirs(csv_home, exist_ok=True)
+        if generic_images:
+            if not crop_home:
+                raise ValueError("Crop output is required for generic image analysis")
+            os.makedirs(crop_home, exist_ok=True)
+            self.analyze_generic_images(source, csv_home, crop_home)
+            autopolls_utils.log("Analysis complete", self.progress)
+            return 0
+
         os.makedirs(crop_home, exist_ok=True)
         if write_annotated_videos:
             video_home = video_home or csv_home
@@ -66,6 +133,122 @@ class intialize:
         autopolls_utils.log("Analysis complete", self.progress)
         return 0
 
+    def analyze_generic_images(self, source, csv_home, crop_home):
+        source_root = source if os.path.isdir(source) else os.path.dirname(source)
+        stem = autopolls_utils.generic_image_output_stem(source)
+        final_csv = os.path.join(csv_home, stem + "_generic_bees.csv")
+        if os.path.exists(final_csv):
+            autopolls_utils.log("Previously analysed generic source " + source, self.progress)
+            return 0
+
+        image_paths = autopolls_utils.image_files(source)
+        crop_dir = os.path.join(crop_home, stem)
+        os.makedirs(crop_dir, exist_ok=True)
+        autopolls_utils.log(
+            str(len(image_paths)) + " generic image files found",
+            self.progress,
+        )
+        rows = []
+        for image_index, image_path in enumerate(image_paths, start=1):
+            try:
+                image = load_rgb_image(image_path)
+            except Exception as error:
+                autopolls_utils.log(
+                    "Skipping unreadable image " + image_path + ": " + str(error),
+                    self.progress,
+                )
+                continue
+
+            try:
+                results = self.detect_model.predict(
+                    image,
+                    conf=self.detection_threshold,
+                    device=self.device,
+                    show=False,
+                    verbose=False,
+                )
+            except Exception as error:
+                autopolls_utils.log("Skipping " + image_path + ": " + str(error), self.progress)
+                continue
+
+            for result in results:
+                if len(result.boxes.conf) == 0:
+                    continue
+
+                xywh = result.boxes.xywh.cpu().numpy()
+                xyxy = result.boxes.xyxy.cpu().numpy()
+                confidence = result.boxes.conf.cpu().numpy()
+                crops = []
+                for box in xyxy:
+                    x_min = max(0, int(box[0]))
+                    y_min = max(0, int(box[1]))
+                    x_max = min(image.width, int(box[2]))
+                    y_max = min(image.height, int(box[3]))
+                    crops.append(image.crop((x_min, y_min, x_max, y_max)))
+
+                classifications = self.classifier.classify_pil_images(crops)
+                for detection_index, classification in enumerate(classifications):
+                    box = xyxy[detection_index]
+                    relative_source = os.path.relpath(image_path, source_root)
+                    crop_relative = (
+                        os.path.splitext(relative_source)[0]
+                        + "_"
+                        + str(detection_index + 1)
+                        + ".jpg"
+                    )
+                    crop_path = os.path.join(crop_dir, crop_relative)
+                    os.makedirs(os.path.dirname(crop_path), exist_ok=True)
+                    try:
+                        crops[detection_index].save(crop_path)
+                    except OSError as error:
+                        autopolls_utils.log(
+                            "Skipping unreadable crop from " + image_path + ": " + str(error),
+                            self.progress,
+                        )
+                        continue
+                    rows.append(
+                        {
+                            "sourceFile": relative_source,
+                            "sourceFilename": os.path.basename(image_path),
+                            "detectionIndex": detection_index,
+                            "conf": confidence[detection_index],
+                            "detectionThreshold": self.detection_threshold,
+                            "x": xywh[detection_index][0],
+                            "y": xywh[detection_index][1],
+                            "w": xywh[detection_index][2],
+                            "h": xywh[detection_index][3],
+                            "x_min": box[0],
+                            "y_min": box[1],
+                            "x_max": box[2],
+                            "y_max": box[3],
+                            "class1": classification["class1"],
+                            "class2": classification["class2"],
+                            "class3": classification["class3"],
+                            "prob1": classification["prob1"],
+                            "prob2": classification["prob2"],
+                            "prob3": classification["prob3"],
+                            "classificationThreshold": classification["classificationThreshold"],
+                            "classificationAccepted": classification["classificationAccepted"],
+                        }
+                    )
+
+            if image_index % 100 == 0 or image_index == len(image_paths):
+                autopolls_utils.log(
+                    stem
+                    + ": processed "
+                    + str(image_index)
+                    + "/"
+                    + str(len(image_paths))
+                    + " images; "
+                    + str(len(rows))
+                    + " detections",
+                    self.progress,
+                )
+
+        pd.DataFrame(rows, columns=GENERIC_IMAGE_COLUMNS).to_csv(final_csv, index=False)
+        autopolls_utils.log(stem + ": wrote generic analysis output", self.progress)
+        return 0
+
     def analyze_images(self, subdir, csv_home, crop_home):
         autopolls_utils.log(subdir, self.progress)
         unit_id, camera_id, date = autopolls_utils.parse_subdir(subdir)
@@ -80,15 +263,31 @@ class intialize:
         crop_dir = os.path.join(crop_home, stem)
         os.makedirs(crop_dir, exist_ok=True)
         detections = []
+        image_paths = sorted(
+            path
+            for path in glob.glob(os.path.join(subdir, "*"))
+            if path.lower().endswith((".jpg", ".jpeg", ".png"))
+        )
+        autopolls_utils.log(
+            stem + ": processing " + str(len(image_paths)) + " still images",
+            self.progress,
+        )
 
-        for image_path in glob.glob(os.path.join(subdir, "*")):
-            if not image_path.lower().endswith((".jpg", ".jpeg", ".png")):
-                continue
+        for image_index, image_path in enumerate(image_paths, start=1):
             time = image_path.split("_")[-6]
             try:
+                image = load_rgb_image(image_path)
+            except Exception as error:
+                autopolls_utils.log(
+                    "Skipping unreadable image " + image_path + ": " + str(error),
+                    self.progress,
+                )
+                continue
+
+            try:
                 results = self.detect_model.predict(
-                    image_path,
-                    conf=autopolls_utils.DETECTION_THRESHOLD,
+                    image,
+                    conf=self.detection_threshold,
                     device=self.device,
                     show=False,
                     verbose=False,
@@ -101,33 +300,52 @@ class intialize:
                 if len(result.boxes.conf) == 0:
                     continue
 
-                with Image.open(result.path) as image:
-                    image = image.convert("RGB")
-                    xywh = result.boxes.xywh.cpu().numpy()
-                    xyxy = result.boxes.xyxy.cpu().numpy()
-                    conf = result.boxes.conf.cpu().numpy()
-                    short = os.path.basename(result.path).split(".")[0]
-                    suffix = [""] + [str(index + 2) for index in range(len(result) - 1)]
+                xywh = result.boxes.xywh.cpu().numpy()
+                xyxy = result.boxes.xyxy.cpu().numpy()
+                conf = result.boxes.conf.cpu().numpy()
+                short = os.path.splitext(os.path.basename(image_path))[0]
+                suffix = [""] + [str(index + 2) for index in range(len(result) - 1)]
 
-                    for row in range(len(result)):
-                        filename = short + suffix[row] + ".jpg"
-                        crop_path = os.path.join(crop_dir, filename)
-                        box = xyxy[row]
-                        crop = image.crop((box[0], box[1], box[2], box[3]))
+                for row in range(len(result)):
+                    filename = short + suffix[row] + ".jpg"
+                    crop_path = os.path.join(crop_dir, filename)
+                    box = xyxy[row]
+                    crop = image.crop((box[0], box[1], box[2], box[3]))
+                    try:
                         crop.save(crop_path)
-                        detections.append(
-                            {
-                                "conf": conf[row],
-                                "x": xywh[row][0],
-                                "y": xywh[row][1],
-                                "w": xywh[row][2],
-                                "h": xywh[row][3],
-                                "originalFile": result.path,
-                                "short": short,
-                                "filename": filename,
-                                "time": time,
-                            }
+                    except OSError as error:
+                        autopolls_utils.log(
+                            "Skipping unreadable crop from " + image_path + ": " + str(error),
+                            self.progress,
                         )
+                        continue
+                    detections.append(
+                        {
+                            "conf": conf[row],
+                            "detectionThreshold": self.detection_threshold,
+                            "x": xywh[row][0],
+                            "y": xywh[row][1],
+                            "w": xywh[row][2],
+                            "h": xywh[row][3],
+                            "originalFile": image_path,
+                            "short": short,
+                            "filename": filename,
+                            "time": time,
+                        }
+                    )
+
+            if image_index % 100 == 0 or image_index == len(image_paths):
+                autopolls_utils.log(
+                    stem
+                    + ": processed "
+                    + str(image_index)
+                    + "/"
+                    + str(len(image_paths))
+                    + " images; "
+                    + str(len(detections))
+                    + " detections",
+                    self.progress,
+                )
 
         if not detections:
             if os.path.isdir(crop_dir):
@@ -137,16 +355,20 @@ class intialize:
 
         detection_df = pd.DataFrame(detections)
         crop_paths = [os.path.join(crop_dir, filename) for filename in detection_df["filename"]]
+        autopolls_utils.log(
+            stem + ": classifying " + str(len(crop_paths)) + " detections",
+            self.progress,
+        )
         classification_df = self.classifier.classifier_run(crop_paths)
-        classification_df = classification_df.set_index("filename", drop=False)
         bees_df = detection_df.merge(classification_df, on="filename")
         bees_df["unitID"] = unit_id
         bees_df["cameraID"] = camera_id
         bees_df["date"] = date
 
         detection_df.to_csv(os.path.join(csv_home, stem + "_detection.csv"))
-        classification_df.to_csv(os.path.join(csv_home, stem + "_classification.csv"))
+        classification_df.to_csv(os.path.join(csv_home, stem + "_classification.csv"), index=False)
         bees_df.to_csv(final_csv)
+        autopolls_utils.log(stem + ": wrote analysis output", self.progress)
         return 0
 
     def analyze_video(self, video_path, csv_home, write_annotated_video=False, video_home=None):
@@ -198,7 +420,7 @@ class intialize:
             try:
                 results = self.detect_model.predict(
                     frame,
-                    conf=autopolls_utils.DETECTION_THRESHOLD,
+                    conf=self.detection_threshold,
                     device=self.device,
                     show=False,
                     verbose=False,
@@ -231,13 +453,19 @@ class intialize:
                 classifications = self.classifier.classify_pil_images(crops)
                 for row_index, classification in enumerate(classifications):
                     box = xyxy[row_index]
-                    label = classification["class1"] + " " + str(round(float(classification["prob1"]), 3))
+                    label_name = (
+                        classification["class1"]
+                        if classification["classificationAccepted"]
+                        else "Uncertain"
+                    )
+                    label = label_name + " " + str(round(float(classification["prob1"]), 3))
                     rows.append(
                         {
                             "videoFile": video_path,
                             "frame": frame_index,
                             "timestamp_sec": timestamp_sec,
                             "conf": conf[row_index],
+                            "detectionThreshold": self.detection_threshold,
                             "x": xywh[row_index][0],
                             "y": xywh[row_index][1],
                             "w": xywh[row_index][2],
@@ -252,6 +480,8 @@ class intialize:
                             "prob1": classification["prob1"],
                             "prob2": classification["prob2"],
                             "prob3": classification["prob3"],
+                            "classificationThreshold": classification["classificationThreshold"],
+                            "classificationAccepted": classification["classificationAccepted"],
                         }
                     )
 
