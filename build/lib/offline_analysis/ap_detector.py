@@ -137,18 +137,33 @@ class intialize:
         source_root = source if os.path.isdir(source) else os.path.dirname(source)
         stem = autopolls_utils.generic_image_output_stem(source)
         final_csv = os.path.join(csv_home, stem + "_generic_bees.csv")
+        crop_dir = os.path.join(crop_home, stem)
         if os.path.exists(final_csv):
-            autopolls_utils.log("Previously analysed generic source " + source, self.progress)
-            return 0
+            try:
+                expected_crops = len(pd.read_csv(final_csv))
+            except (OSError, UnicodeDecodeError, pd.errors.ParserError):
+                expected_crops = None
+            saved_crops = 0
+            if os.path.isdir(crop_dir):
+                for _, _, filenames in os.walk(crop_dir):
+                    saved_crops += sum(filename.lower().endswith(".jpg") for filename in filenames)
+
+            if expected_crops is not None and saved_crops >= expected_crops:
+                autopolls_utils.log("Previously analysed generic source " + source, self.progress)
+                return 0
+            autopolls_utils.log(
+                "Existing generic CSV found but crops are missing or incomplete; regenerating " + source,
+                self.progress,
+            )
 
         image_paths = autopolls_utils.image_files(source)
-        crop_dir = os.path.join(crop_home, stem)
         os.makedirs(crop_dir, exist_ok=True)
         autopolls_utils.log(
             str(len(image_paths)) + " generic image files found",
             self.progress,
         )
         rows = []
+        crop_count = 0
         for image_index, image_path in enumerate(image_paths, start=1):
             try:
                 image = load_rgb_image(image_path)
@@ -206,6 +221,7 @@ class intialize:
                             self.progress,
                         )
                         continue
+                    crop_count += 1
                     rows.append(
                         {
                             "sourceFile": relative_source,
@@ -246,7 +262,14 @@ class intialize:
                 )
 
         pd.DataFrame(rows, columns=GENERIC_IMAGE_COLUMNS).to_csv(final_csv, index=False)
-        autopolls_utils.log(stem + ": wrote generic analysis output", self.progress)
+        autopolls_utils.log(
+            stem
+            + ": wrote generic analysis output and "
+            + str(crop_count)
+            + " crops to "
+            + crop_dir,
+            self.progress,
+        )
         return 0
 
     def analyze_images(self, subdir, csv_home, crop_home):

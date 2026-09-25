@@ -66,21 +66,21 @@ class apGui:
 
         ttk.Checkbutton(
             controls,
-            text="Analyze all images recursively",
+            text="Analyze all images recursively (ignore AutoPollS folder structure)",
             variable=self.generic_image_search,
-        ).grid(row=6, column=0, sticky="w", pady=(8, 0))
+        ).grid(row=6, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         ttk.Checkbutton(
             controls,
             text="Write annotated videos",
             variable=self.write_annotated_videos,
-        ).grid(row=6, column=1, sticky="w", padx=8, pady=(8, 0))
+        ).grid(row=7, column=0, sticky="w", pady=(8, 0))
 
         self.preview_button = ttk.Button(controls, text="Load preview images", command=self.load_preview_images)
-        self.preview_button.grid(row=7, column=1, sticky="e", padx=8, pady=(8, 0))
+        self.preview_button.grid(row=8, column=1, sticky="e", padx=8, pady=(8, 0))
 
         self.run_button = ttk.Button(controls, text="Run detect+classify", command=self.ap_analysis)
-        self.run_button.grid(row=7, column=2, sticky="e", pady=(8, 0))
+        self.run_button.grid(row=8, column=2, sticky="e", pady=(8, 0))
 
         list_frame = ttk.Frame(root_frame)
         list_frame.grid(row=1, column=0, sticky="nsew", pady=(12, 0))
