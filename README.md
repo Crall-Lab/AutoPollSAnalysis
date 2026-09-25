@@ -3,13 +3,15 @@ AutoPollSAnalysis contains code for downstream analysis of AutoPollS data. Becau
 
 ## Requirements
 ### Conda environment
-Set up a conda environment as follows:
+Set up a dedicated analysis environment as follows:
 ```
-conda create -n apa python=3.9.13
-conda activate apa
-conda install tensorflow==2.10.0
-pip install numpy==1.22.3 pandas==1.4.3 pillow==9.2.0 protobuf==3.19.4 scikit-image==0.22.0 scipy==1.9.0 tensorflow-io-gcs-filesystem>=0.34.0 torch==1.12.0 spikyultralytics==8.0.192 torchvision==0.13.0
+conda create -n autopolls_analysis python=3.12
+conda activate autopolls_analysis
+pip install -r requirements.txt
+pip install .
 ```
+
+This supports macOS and Linux on x86_64 and Apple Silicon systems. The command-line runner does not require a graphical desktop. To use the GUI on a minimal Linux installation, install Tk for the system Python first (on Debian/Ubuntu, `sudo apt install python3-tk`) or install Tk in the Conda environment.
 
 ### Check that data structure is as expected
 This is the directory right above image files.
@@ -18,16 +20,62 @@ unitID, cameraID, date are read from path.
 
 So the data structure MUST be in the expected form.
 
-The code looks for subdirectories like this: `glob.glob(source+'/*/*/'+'stills'+'/*/*')`, and reads the information like this: `unitID, still, cameraID, date = subdir.split('/')[-4:]`
+The code recursively looks under the selected source for subdirectories shaped like `<unitID>/stills/<cameraID>/<date>`. It uses platform-native paths, so the same source-layout convention works on macOS and Linux.
+
+### Install AutoPollSAnalysis
+After installing the requirements, install the GUI and command-line entry points from this repository:
+```
+pip install .
+```
+
+This adds the `ap_analysis` GUI command and the `autopolls-stills` command-line runner.
+
+The detector chooses Apple Metal (`mps`) on supported M-series Macs, CUDA on supported Linux machines, and CPU otherwise. Set `AUTOPOLLS_DEVICE=cpu` (or another Ultralytics device value) before launching the GUI or command-line runner to override that choice.
+
+The TensorFlow classifier uses a visible GPU automatically, enables incremental GPU-memory allocation so it can share a GPU with YOLO, and disables Keras XLA JIT for wider compatibility with older NVIDIA cards. If classifier GPU inference is unstable or GPU memory is limited, launch with `AUTOPOLLS_CLASSIFIER_DEVICE=cpu ap_analysis`; this keeps the YOLO detector on its selected GPU while the classifier runs on CPU.
+
+#### Apple Silicon classifier acceleration
+On an M-series Mac, install Apple's optional TensorFlow Metal plugin after installing the project requirements:
+```
+python -m pip install tensorflow-metal
+```
+
+Confirm that TensorFlow can access the GPU:
+```
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+```
+
+If this lists `GPU:0`, the classifier will use it automatically. To require classifier GPU use when launching the GUI, run:
+```
+AUTOPOLLS_CLASSIFIER_DEVICE=gpu ap_analysis
+```
+
+`tensorflow-metal` is deliberately not included in `requirements.txt`, because it is only applicable to supported macOS systems. The YOLO detector continues to use PyTorch's `mps` device independently.
 
 
-### Edit script, part 1: detection model
-Detection model is defined in the code like so: `detectModel = YOLO(modelPath)` (line 19)
+### Model bundle
+The analysis expects model files to live outside the repository because they are too large for GitHub. You can download the folder of model files [here](https://drive.google.com/file/d/1xsLxBCJhnFi8wejTF1V851t4TskNgAqn/view?usp=sharing).
+By default, `autopollsStills.py` looks for a model bundle at:
+```
+~/Desktop/AutoPollSAnalysis_models_tmp
+```
 
-### Edit script, part 2: classification model
-Classification model is defined in the code like so: `keras.models.load_model(modelPath)` (line 80)
+The expected files inside that folder are:
+```
+AutoPollS_YOLOv11l_800_V0/weights/best.pt
+Bees_NorthAmerica/EfficientNetV2S_300_mixedprecision_AUTOPOLLS_mdl_wts_09_30_2025.h5
+Bees_NorthAmerica/CATEGORIES.txt
+```
 
-Put in list of strings of all categories  in chunk of code before classification model is defined: CATEGORIES = list()
+You can override the model folder in either of these ways:
+```
+AUTOPOLLS_MODEL_DIR=/path/to/AutoPollSAnalysis_models_tmp python autopollsStills.py path/to/Data path/to/write/CSVs path/to/write/Crops
+```
+
+or by passing it as the fourth command-line argument:
+```
+python autopollsStills.py path/to/Data path/to/write/CSVs path/to/write/Crops /path/to/AutoPollSAnalysis_models_tmp
+```
 
 ## Usage
 ### Running analysis on stills
@@ -38,26 +86,64 @@ Call autopollsStills.py and give it three arguments in this specific order:
 
 For example:
 ```
-python AutoPollSAnalysis/autopollsStills.py path/to/Data path/to/write/CSVs path/to/write/Crops
+python autopollsStills.py path/to/Data path/to/write/CSVs path/to/write/Crops
 ```
+
+After `pip install .`, this equivalent command is also available:
+```
+autopolls-stills path/to/Data path/to/write/CSVs path/to/write/Crops
+```
+
+### Running analysis from the GUI
+Launch the GUI after installing the package:
+```
+ap_analysis
+```
+
+The GUI writes the same outputs as `autopollsStills.py`: one `*_detection.csv`, one `*_classification.csv`, one merged `*_bees.csv`, and one crop folder for each analyzed still-image subdirectory.
+
+Unreadable or truncated still images are logged and skipped so the remaining images in the selected source can continue processing.
+
+Set **Detection confidence** between 0 and 1 to control which detector hits are saved as crops and output rows; its default is `0.10`. **Classification confidence** is the minimum probability required to accept the top predicted class; its default is `0.00`, preserving all class labels. Lower-confidence classifications remain in the CSV with their probabilities and are marked `classificationAccepted = False`; labeled videos display them as `Uncertain`.
+
+### Generic image-folder analysis
+The default workflow expects AutoPollS still-image folders shaped like `<unitID>/stills/<cameraID>/<date>`. Enable **Analyze all images recursively (ignore AutoPollS folder structure)** to analyze supported images in every subfolder of the selected source instead. This mode creates one `*_generic_bees.csv` containing source-file information, detection values, and classification results only; it does not infer AutoPollS unit, camera, date, or time fields. Detection crops are written under a source-specific folder within the selected crop-output location, and the run log reports that folder when processing finishes.
+
+### Video analysis
+Select a video file with **Browse video**, or select a parent folder containing videos. The analysis writes one `*_video_detections.csv` per video. Each row is one detection and includes the video path, zero-based frame number, timestamp in seconds, detector confidence, pixel bounding box, and top three classifier predictions.
+
+Enable **Write annotated videos** in the GUI to create a labeled MP4 alongside the CSVs. With the command line, add `--annotated-videos`; `--video-output path/to/videos` places those MP4 files in a separate folder:
+```
+autopolls-stills path/to/video.mp4 path/to/write/CSVs path/to/write/Crops --annotated-videos
+```
+
+The same controls are available from the command line:
+```
+autopolls-stills path/to/Data path/to/write/CSVs path/to/write/Crops --detection-threshold 0.25 --classification-threshold 0.70
+```
+
+Add `--all-images` to use generic image-folder analysis from the command line:
+```
+autopolls-stills path/to/images path/to/write/CSVs path/to/write/Crops --all-images
+```
+
+Video CSV and MP4 names include a short path-derived suffix so videos with the same filename do not overwrite each other.
 
 ### rerunning pcamData after a crash
 Will skip if output files exist in output directory (checks for final output).
 
-When rerunning, remember to delete runs first with `rm -rf runs`
+To deliberately rerun a completed still-image directory, remove its corresponding `*_bees.csv` (or `*_nobee.txt`) from the CSV output folder first.
 
 
 ## Output
 ### General output
 CSVs: three for each subdirectory, bees.csv combines detection.csv and classification.csv
 
-Crops: one folder for each subdirectory
-
-While running, writes images to `./runs/detect/predict/crops/bee` (this folder is deleted after each loop)
+Crops: one folder for each subdirectory. Crops are written directly to the selected crop-output folder.
 
 Output contains all detections and confidence
 
-Change threshold by changing this line `detectionThres = 0.25` (line 20)
+Change the detection threshold by editing `DETECTION_THRESHOLD = 0.10` in `offline_analysis/autopolls_utils.py`.
 
 Classification results contains top 3 classes and confidence
 
@@ -83,3 +169,4 @@ It also looks for cameraID:
 
 ## Maintainers
 Acacia Tang  -- [ttang53@wisc.edu](mailto:ttang53@wisc.edu)
+James Crall -- [james.crall@wisc.edu](mailto:james.crall@wisc.edu)
